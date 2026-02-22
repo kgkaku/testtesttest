@@ -1,0 +1,31 @@
+name: Update BTV M3U Playlist
+
+on:
+  schedule:
+    # প্রতি 6 ঘন্টা পর পর রান করবে (আপনি সময় পরিবর্তন করতে পারেন)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
+
+jobs:
+  update-playlist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Run Update Script
+        run: bash ./update_playlist.sh
+
+      - name: Check for Changes
+        id: git-check
+        run: |
+          git diff --quiet || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and Push if Changed
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add btv_playlist.m3u
+          git commit -m "Auto-update M3U playlist [skip ci]"
+          git push
