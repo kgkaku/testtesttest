@@ -2,30 +2,78 @@ name: Update BTV M3U Playlist
 
 on:
   schedule:
-    # প্রতি 6 ঘন্টা পর পর রান করবে (আপনি সময় পরিবর্তন করতে পারেন)
     - cron: '0 */6 * * *'
-  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
+  workflow_dispatch:
+  push:
+    paths:
+      - 'template.m3u'
+      - 'update_playlist.sh'
+      - '.github/workflows/update_m3u.yml'
 
 jobs:
   update-playlist:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl sed grep
+          
+      - name: Debug - Show template file
+        run: |
+          echo "=== Template File Content ==="
+          cat -A template.m3u
+          echo "=== End of Template File ==="
+          file template.m3u
+          
+      - name: Make script executable
+        run: chmod +x ./update_playlist.sh
+        
+      - name: Verify script permissions
+        run: ls -la update_playlist.sh
+        
       - name: Run Update Script
-        run: bash ./update_playlist.sh
+        run: ./update_playlist.sh
+        
+      - name: Show Generated Playlist
+        if: always()
+        run: |
+          if [ -f btv_playlist.m3u ]; then
+            echo "=== Generated Playlist ==="
+            cat btv_playlist.m3u
+            echo "=== End of Playlist ==="
+            echo "Playlist size: $(wc -l < btv_playlist.m3u) lines"
+          else
+            echo "No playlist generated!"
+            exit 1
+          fi
 
       - name: Check for Changes
         id: git-check
         run: |
-          git diff --quiet || echo "changed=true" >> $GITHUB_OUTPUT
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          git add btv_playlist.m3u
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Commit and Push if Changed
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add btv_playlist.m3u
           git commit -m "Auto-update M3U playlist [skip ci]"
           git push
