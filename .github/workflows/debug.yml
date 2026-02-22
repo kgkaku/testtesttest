@@ -1,10 +1,9 @@
 name: Debug BTV API
 
 on:
-  workflow_dispatch:  # ম্যানুয়ালি রান করার জন্য
+  workflow_dispatch:  # Manual trigger
   push:
     paths:
-      - 'debug_channel.sh'
       - '.github/workflows/debug.yml'
 
 jobs:
@@ -19,155 +18,153 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq curl
 
-      - name: Create Debug Script
+      - name: Run Debug Commands
         run: |
-          cat > debug_channel.sh << 'EOF'
-#!/bin/bash
-
-echo "========================================="
-echo "BTV Channel API Debugger"
-echo "========================================="
-echo ""
-
-# Test main API first
-echo "1. Testing Main API:"
-echo "----------------------------------------"
-MAIN_API="https://www.btvlive.gov.bd/api/home"
-echo "URL: $MAIN_API"
-
-MAIN_RESPONSE=$(curl -s -w "\n%{http_code}" "$MAIN_API" -A "Mozilla/5.0" -m 10 --insecure)
-MAIN_HTTP_CODE=$(echo "$MAIN_RESPONSE" | tail -n1)
-MAIN_BODY=$(echo "$MAIN_RESPONSE" | sed '$d')
-
-echo "HTTP Status: $MAIN_HTTP_CODE"
-echo "Response Size: ${#MAIN_BODY} characters"
-
-if [ "$MAIN_HTTP_CODE" = "200" ]; then
-    echo "✓ Main API is accessible"
-    
-    # Check if it's JSON
-    if echo "$MAIN_BODY" | jq empty 2>/dev/null; then
-        echo "✓ Valid JSON response"
-        echo "Root keys: $(echo "$MAIN_BODY" | jq 'keys')"
-    else
-        echo "✗ Not a valid JSON response"
-        echo "First 200 chars:"
-        echo "$MAIN_BODY" | head -c 200
-    fi
-else
-    echo "✗ Main API failed"
-fi
-
-echo ""
-echo "2. Testing Individual Channel APIs:"
-echo "----------------------------------------"
-
-# Test each channel
-CHANNELS=("BTV" "BTV-News" "BTV-Chattogram" "Sangsad-Television")
-
-for channel in "${CHANNELS[@]}"; do
-    echo ""
-    echo "Channel: $channel"
-    echo "------------------------"
-    
-    # Try different build IDs
-    BUILD_IDS=(
-        "wr5BMimBGS-yN5Rc2tmam"  # আপনার দেওয়া
-        "new-build-id"            # সাধারণ ফরম্যাট
-        "latest"                   #试试
-    )
-    
-    for build_id in "${BUILD_IDS[@]}"; do
-        API_URL="https://www.btvlive.gov.bd/_next/data/${build_id}/channel/${channel}.json?id=${channel}"
-        echo "  Trying build ID: $build_id"
-        
-        RESPONSE=$(curl -s -w "\n%{http_code}" "$API_URL" -A "Mozilla/5.0" -m 5 --insecure)
-        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-        BODY=$(echo "$RESPONSE" | sed '$d')
-        
-        echo "  HTTP Status: $HTTP_CODE"
-        
-        if [ "$HTTP_CODE" = "200" ]; then
-            echo "  ✓ Success with build ID: $build_id"
-            
-            # Try to extract data
-            IDENTIFIER=$(echo "$BODY" | jq -r '.pageProps.currentChannel.channel_details.identifier // empty' 2>/dev/null)
-            if [ -n "$IDENTIFIER" ]; then
-                echo "  ✓ Found identifier: $IDENTIFIER"
-            else
-                echo "  ✗ No identifier found"
-            fi
-            
-            BANNER=$(echo "$BODY" | jq -r '.pageProps.currentChannel.channel_details.banner // empty' 2>/dev/null)
-            if [ -n "$BANNER" ]; then
-                echo "  ✓ Found banner: $BANNER"
-            fi
-            
-            SOURCE_URL=$(echo "$BODY" | jq -r '.pageProps.sourceURL // empty' 2>/dev/null)
-            if [ -n "$SOURCE_URL" ]; then
-                echo "  ✓ Found sourceURL: $SOURCE_URL"
-                USER_ID=$(echo "$SOURCE_URL" | grep -oP '[^/]+(?=/index\.m3u8)' | tail -1)
-                echo "  ✓ Extracted user ID: $USER_ID"
-            fi
-            
-            break  # Successfully found working build ID
-        fi
-    done
-    echo "------------------------"
-done
-
-echo ""
-echo "3. Testing with Browser Headers:"
-echo "----------------------------------------"
-
-# Try with common headers
-HEADERS=(
-    "-H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'"
-    "-H 'Accept: application/json'"
-    "-H 'Accept-Language: en-US,en;q=0.9'"
-    "-H 'Referer: https://www.btvlive.gov.bd/'"
-)
-
-CHANNEL="BTV"
-API_URL="https://www.btvlive.gov.bd/_next/data/wr5BMimBGS-yN5Rc2tmam/channel/${CHANNEL}.json?id=${CHANNEL}"
-
-echo "Testing with full headers:"
-FULL_RESPONSE=$(curl -s -w "\n%{http_code}" "$API_URL" \
-    -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-    -H "Accept: application/json" \
-    -H "Accept-Language: en-US,en;q=0.9" \
-    -H "Referer: https://www.btvlive.gov.bd/" \
-    -H "Origin: https://www.btvlive.gov.bd" \
-    --insecure -m 10)
-
-FULL_HTTP_CODE=$(echo "$FULL_RESPONSE" | tail -n1)
-FULL_BODY=$(echo "$FULL_RESPONSE" | sed '$d')
-
-echo "HTTP Status: $FULL_HTTP_CODE"
-if [ "$FULL_HTTP_CODE" = "200" ]; then
-    echo "✓ Headers working!"
-    echo "Response keys: $(echo "$FULL_BODY" | jq 'keys' 2>/dev/null)"
-else
-    echo "✗ Headers didn't help"
-fi
-
-echo ""
-echo "========================================="
-echo "Debug Complete"
-echo "========================================="
-EOF
-
-      - name: Make Script Executable
-        run: chmod +x debug_channel.sh
-
-      - name: Run Debug Script
-        run: ./debug_channel.sh
+          echo "========================================="
+          echo "BTV Channel API Debugger"
+          echo "========================================="
+          echo ""
+          
+          # Test main API
+          echo "1. Testing Main API:"
+          echo "----------------------------------------"
+          MAIN_API="https://www.btvlive.gov.bd/api/home"
+          echo "URL: $MAIN_API"
+          
+          MAIN_RESPONSE=$(curl -s -w "\n%{http_code}" "$MAIN_API" -A "Mozilla/5.0" -m 10 --insecure)
+          MAIN_HTTP_CODE=$(echo "$MAIN_RESPONSE" | tail -n1)
+          MAIN_BODY=$(echo "$MAIN_RESPONSE" | sed '$d')
+          
+          echo "HTTP Status: $MAIN_HTTP_CODE"
+          echo "Response Size: ${#MAIN_BODY} characters"
+          
+          if [ "$MAIN_HTTP_CODE" = "200" ]; then
+              echo "✓ Main API is accessible"
+              
+              # Check if it's JSON
+              if echo "$MAIN_BODY" | jq empty 2>/dev/null; then
+                  echo "✓ Valid JSON response"
+                  echo "Root keys: $(echo "$MAIN_BODY" | jq 'keys')"
+              else
+                  echo "✗ Not a valid JSON response"
+                  echo "First 200 chars:"
+                  echo "$MAIN_BODY" | head -c 200
+              fi
+          else
+              echo "✗ Main API failed"
+          fi
+          
+          echo ""
+          echo "2. Testing Individual Channel APIs:"
+          echo "----------------------------------------"
+          
+          # Test each channel
+          CHANNELS=("BTV" "BTV-News" "BTV-Chattogram" "Sangsad-Television")
+          
+          for channel in "${CHANNELS[@]}"; do
+              echo ""
+              echo "Channel: $channel"
+              echo "------------------------"
+              
+              # Try with the build ID from your original script
+              BUILD_ID="wr5BMimBGS-yN5Rc2tmam"
+              API_URL="https://www.btvlive.gov.bd/_next/data/${BUILD_ID}/channel/${channel}.json?id=${channel}"
+              echo "  URL: $API_URL"
+              
+              RESPONSE=$(curl -s -w "\n%{http_code}" "$API_URL" -A "Mozilla/5.0" -m 10 --insecure)
+              HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+              BODY=$(echo "$RESPONSE" | sed '$d')
+              
+              echo "  HTTP Status: $HTTP_CODE"
+              
+              if [ "$HTTP_CODE" = "200" ]; then
+                  echo "  ✓ Success!"
+                  
+                  # Try to extract data
+                  echo "  Looking for identifier..."
+                  IDENTIFIER=$(echo "$BODY" | jq -r '.pageProps.currentChannel.channel_details.identifier // "not found"' 2>/dev/null)
+                  echo "  Identifier: $IDENTIFIER"
+                  
+                  echo "  Looking for banner..."
+                  BANNER=$(echo "$BODY" | jq -r '.pageProps.currentChannel.channel_details.banner // "not found"' 2>/dev/null)
+                  echo "  Banner: $BANNER"
+                  
+                  echo "  Looking for sourceURL..."
+                  SOURCE_URL=$(echo "$BODY" | jq -r '.pageProps.sourceURL // "not found"' 2>/dev/null)
+                  echo "  SourceURL: $SOURCE_URL"
+                  
+                  if [ "$SOURCE_URL" != "not found" ]; then
+                      USER_ID=$(echo "$SOURCE_URL" | grep -oP '[^/]+(?=/index\.m3u8)' | tail -1)
+                      echo "  Extracted User ID: $USER_ID"
+                  fi
+                  
+                  # Show full response structure (limited)
+                  echo ""
+                  echo "  Response structure (first level keys):"
+                  echo "$BODY" | jq 'keys' 2>/dev/null
+              else
+                  echo "  ✗ Failed with HTTP $HTTP_CODE"
+              fi
+              echo "------------------------"
+          done
+          
+          echo ""
+          echo "3. Testing with Browser Headers:"
+          echo "----------------------------------------"
+          
+          CHANNEL="BTV"
+          BUILD_ID="wr5BMimBGS-yN5Rc2tmam"
+          API_URL="https://www.btvlive.gov.bd/_next/data/${BUILD_ID}/channel/${CHANNEL}.json?id=${CHANNEL}"
+          
+          echo "Testing with full browser headers:"
+          FULL_RESPONSE=$(curl -s -w "\n%{http_code}" "$API_URL" \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+              -H "Accept: application/json, text/plain, */*" \
+              -H "Accept-Language: en-US,en;q=0.9" \
+              -H "Referer: https://www.btvlive.gov.bd/" \
+              -H "Origin: https://www.btvlive.gov.bd" \
+              -H "Connection: keep-alive" \
+              --insecure -m 10)
+          
+          FULL_HTTP_CODE=$(echo "$FULL_RESPONSE" | tail -n1)
+          FULL_BODY=$(echo "$FULL_RESPONSE" | sed '$d')
+          
+          echo "HTTP Status: $FULL_HTTP_CODE"
+          if [ "$FULL_HTTP_CODE" = "200" ]; then
+              echo "✓ Headers working!"
+              echo "Response keys: $(echo "$FULL_BODY" | jq 'keys' 2>/dev/null)"
+              
+              # Try to extract data
+              IDENTIFIER=$(echo "$FULL_BODY" | jq -r '.pageProps.currentChannel.channel_details.identifier // "not found"' 2>/dev/null)
+              echo "Identifier with headers: $IDENTIFIER"
+          else
+              echo "✗ Headers didn't help"
+          fi
+          
+          echo ""
+          echo "========================================="
+          echo "Debug Complete"
+          echo "========================================="
 
       - name: Save Debug Output
         if: always()
         run: |
-          ./debug_channel.sh > debug_output.txt
-          echo "Debug output saved to debug_output.txt"
+          {
+            echo "=== Debug Output ==="
+            echo "Timestamp: $(date)"
+            echo ""
+            echo "1. Main API Test:"
+            curl -I "https://www.btvlive.gov.bd/api/home" -m 5 2>/dev/null || echo "Failed"
+            echo ""
+            echo "2. Channel API Tests:"
+            for channel in BTV BTV-News BTV-Chattogram Sangsad-Television; do
+              echo ""
+              echo "--- $channel ---"
+              curl -s "https://www.btvlive.gov.bd/_next/data/wr5BMimBGS-yN5Rc2tmam/channel/${channel}.json?id=${channel}" \
+                -H "User-Agent: Mozilla/5.0" \
+                -m 5 | jq '.' 2>/dev/null || echo "Failed to fetch"
+            done
+          } > debug_output.txt
 
       - name: Upload Debug Output
         if: always()
