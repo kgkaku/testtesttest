@@ -2,7 +2,8 @@ name: Update BTV M3U Playlist
 
 on:
   schedule:
-    - cron: '0 */3 * * *'  # প্রতি ৩ ঘন্টা পর পর
+    # প্রতি 6 ঘন্টা পর পর রান করবে
+    - cron: '0 */6 * * *'
   workflow_dispatch:  # ম্যানুয়াল রানের জন্য
   push:
     paths:
@@ -15,40 +16,30 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      
+    
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y jq curl sed grep
-          
-      - name: Debug - Show template file
+
+      - name: Show Template File
         run: |
           echo "=== Template File Content ==="
           cat -A template.m3u
           echo "=== End of Template File ==="
-          
-      - name: Make script executable
+
+      - name: Make Script Executable
         run: chmod +x ./update_playlist.sh
-        
-      - name: Verify script
-        run: |
-          ls -la update_playlist.sh
-          file update_playlist.sh
-          
-      - name: Test API connection
-        run: |
-          echo "Testing API connection..."
-          curl -I "https://www.btvlive.gov.bd/api/home"
-          
+
       - name: Run Update Script
         run: ./update_playlist.sh
-        
+
       - name: Show Generated Playlist
         if: always()
         run: |
@@ -59,6 +50,7 @@ jobs:
             echo "Playlist size: $(wc -l < btv_playlist.m3u) lines"
           else
             echo "No playlist generated!"
+            exit 1
           fi
 
       - name: Check for Changes
@@ -80,5 +72,5 @@ jobs:
       - name: Commit and Push if Changed
         if: steps.git-check.outputs.changed == 'true'
         run: |
-          git commit -m "Auto-update M3U playlist [skip ci]"
+          git commit -m "Auto-update BTV M3U playlist [skip ci]"
           git push
