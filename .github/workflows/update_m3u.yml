@@ -2,9 +2,8 @@ name: Update BTV M3U Playlist
 
 on:
   schedule:
-    # প্রতি 6 ঘন্টা পর পর রান করবে
-    - cron: '0 */6 * * *'
-  workflow_dispatch:  # ম্যানুয়াল রানের জন্য
+    - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:  # Manual trigger
   push:
     paths:
       - 'template.m3u'
@@ -19,39 +18,18 @@ jobs:
     
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq curl sed grep
-
-      - name: Show Template File
-        run: |
-          echo "=== Template File Content ==="
-          cat -A template.m3u
-          echo "=== End of Template File ==="
+          sudo apt-get install -y jq curl
 
       - name: Make Script Executable
         run: chmod +x ./update_playlist.sh
 
       - name: Run Update Script
         run: ./update_playlist.sh
-
-      - name: Show Generated Playlist
-        if: always()
-        run: |
-          if [ -f btv_playlist.m3u ]; then
-            echo "=== Generated Playlist ==="
-            cat btv_playlist.m3u
-            echo "=== End of Playlist ==="
-            echo "Playlist size: $(wc -l < btv_playlist.m3u) lines"
-          else
-            echo "No playlist generated!"
-            exit 1
-          fi
 
       - name: Check for Changes
         id: git-check
