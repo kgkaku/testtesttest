@@ -17,16 +17,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Channel mapping (Bengali/English name -> URL name)
+# Channel mapping (Template Name -> URL Name)
+# IMPORTANT: Exact mapping from your template
 declare -A CHANNEL_MAP=(
     ["BTV"]="BTV"
-    ["বিটিভি"]="BTV"
     ["BTV News"]="BTV-News"
-    ["বিটিভি নিউজ"]="BTV-News"
     ["BTV Chattogram"]="BTV-Chattogram"
-    ["বিটিভি চট্টগ্রাম"]="BTV-Chattogram"
     ["Sangsad Television"]="Sangsad-Television"
-    ["সংসদ টেলিভিশন"]="Sangsad-Television"
 )
 
 # Function to print colored output
@@ -40,12 +37,7 @@ print_status() {
 extract_channel_name() {
     local line="$1"
     # Remove #EXTINF:-1 tvg-logo="" part and trim
-    echo "$line" | sed 's/^#EXTINF:-1 tvg-logo="".*,[[:space:]]*//' | sed 's/[[:space:]]*$//'
-}
-
-# Function to clean text (remove carriage returns, etc.)
-clean_text() {
-    echo "$1" | tr -d '\r' | xargs
+    echo "$line" | sed 's/^#EXTINF:-1 tvg-logo="".*,[[:space:]]*//' | sed 's/[[:space:]]*$//' | tr -d '\r'
 }
 
 # Function to fetch channel data
@@ -74,6 +66,8 @@ extract_banner() {
     
     if [ -n "$banner" ] && [ "$banner" != "null" ]; then
         if [[ "$banner" != http* ]]; then
+            # Remove any leading slash if present
+            banner=$(echo "$banner" | sed 's/^\///')
             banner="https://www.btvlive.gov.bd/${banner}"
         fi
         echo "$banner"
@@ -119,6 +113,7 @@ sed -i 's/\r$//' "$TEMPLATE_FILE" 2>/dev/null || true
 
 # Read template file and process channels
 print_status "$YELLOW" "Reading template file: $TEMPLATE_FILE"
+print_status "$YELLOW" "----------------------------------------"
 
 # Initialize output file
 > "$OUTPUT_FILE"
@@ -127,12 +122,8 @@ print_status "$YELLOW" "Reading template file: $TEMPLATE_FILE"
 total_channels=0
 successful_channels=0
 failed_channels=0
-skipped_channels=0
 
 # Read the template file line by line
-current_channel=""
-current_url=""
-
 while IFS= read -r line || [ -n "$line" ]; do
     # Remove carriage return
     line=$(echo "$line" | tr -d '\r')
@@ -144,33 +135,32 @@ while IFS= read -r line || [ -n "$line" ]; do
     
     # Check if this is an EXTINF line (channel info)
     if [[ $line == \#EXTINF* ]]; then
-        current_channel=$(extract_channel_name "$line")
+        channel_name=$(extract_channel_name "$line")
         total_channels=$((total_channels + 1))
         
         print_status "$YELLOW" ""
-        print_status "$YELLOW" "[$total_channels] Processing: $current_channel"
+        print_status "$YELLOW" "[$total_channels] Processing: '$channel_name'"
         
-        # Find URL name for this channel
-        urlname=""
-        for key in "${!CHANNEL_MAP[@]}"; do
-            if [[ "$current_channel" == *"$key"* ]] || [[ "$key" == *"$current_channel"* ]]; then
-                urlname="${CHANNEL_MAP[$key]}"
-                print_status "$GREEN" "  Matched URL name: $urlname"
-                break
-            fi
-        done
+        # Get URL name from map - EXACT MATCH
+        urlname="${CHANNEL_MAP[$channel_name]}"
         
         if [ -z "$urlname" ]; then
-            print_status "$RED" "  ✗ Could not find URL name for: $current_channel"
+            print_status "$RED" "  ✗ No mapping found for: '$channel_name'"
+            print_status "$YELLOW" "  Available mappings:"
+            for key in "${!CHANNEL_MAP[@]}"; do
+                print_status "$YELLOW" "    '$key' -> '${CHANNEL_MAP[$key]}'"
+            done
             failed_channels=$((failed_channels + 1))
             continue
         fi
+        
+        print_status "$GREEN" "  ✓ Found mapping: '$channel_name' -> '$urlname'"
         
         # Fetch channel data
         channel_data=$(fetch_channel_data "$urlname")
         
         if [ $? -ne 0 ] || [ -z "$channel_data" ]; then
-            print_status "$RED" "  ✗ Failed to fetch data for: $current_channel"
+            print_status "$RED" "  ✗ Failed to fetch data for: $channel_name"
             failed_channels=$((failed_channels + 1))
             continue
         fi
@@ -181,13 +171,13 @@ while IFS= read -r line || [ -n "$line" ]; do
         user_id=$(extract_user_id "$channel_data")
         
         # Debug output
-        print_status "$YELLOW" "  Banner: $banner"
-        print_status "$YELLOW" "  Identifier: $identifier"
-        print_status "$YELLOW" "  User ID: $user_id"
+        print_status "$YELLOW" "  Banner: ${banner:-"Not found"}"
+        print_status "$YELLOW" "  Identifier: ${identifier:-"Not found"}"
+        print_status "$YELLOW" "  User ID: ${user_id:-"Not found"}"
         
         # Validate extracted data
         if [ -z "$identifier" ] || [ "$identifier" = "null" ]; then
-            print_status "$RED" "  ✗ Missing identifier for: $current_channel"
+            print_status "$RED" "  ✗ Missing identifier for: $channel_name"
             failed_channels=$((failed_channels + 1))
             continue
         fi
@@ -199,10 +189,10 @@ while IFS= read -r line || [ -n "$line" ]; do
         
         # Generate stream URL
         stream_url="${BASE_URL}${identifier}/BD/${user_id}/index.m3u8"
-        print_status "$GREEN" "  Stream URL: $stream_url"
+        print_status "$GREEN" "  ✓ Generated URL: $stream_url"
         
         # Write to output file
-        echo "#EXTINF:-1 tvg-logo=\"$banner\", $current_channel" >> "$OUTPUT_FILE"
+        echo "#EXTINF:-1 tvg-logo=\"$banner\", $channel_name" >> "$OUTPUT_FILE"
         echo "$stream_url" >> "$OUTPUT_FILE"
         echo "" >> "$OUTPUT_FILE"
         
@@ -212,9 +202,6 @@ while IFS= read -r line || [ -n "$line" ]; do
         # Small delay to avoid rate limiting
         sleep 1
         
-    else
-        # Skip the original URL line
-        continue
     fi
     
 done < "$TEMPLATE_FILE"
@@ -232,16 +219,23 @@ fi
 print_status "$GREEN" "Output file: $OUTPUT_FILE"
 print_status "$GREEN" "========================================="
 
+# Check if any entries were added
+if [ "$successful_channels" -eq 0 ]; then
+    print_status "$RED" "Error: No channels were successfully processed!"
+    exit 1
+fi
+
 # Show the generated playlist
 if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
     print_status "$YELLOW" ""
     print_status "$YELLOW" "Generated Playlist Content:"
-    print_status "$YELLOW" "-----------------------------------------"
+    print_status "$YELLOW" "----------------------------------------"
     cat "$OUTPUT_FILE"
-    print_status "$YELLOW" "-----------------------------------------"
+    print_status "$YELLOW" "----------------------------------------"
 else
-    print_status "$RED" "Error: No playlist generated!"
+    print_status "$RED" "Error: Playlist file is empty or missing!"
     exit 1
 fi
 
+print_status "$GREEN" "✓ Script completed successfully!"
 exit 0
